@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classic Snake Game with On-Screen Controls</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            margin: 5px 0;
+            font-size: 2.2rem;
+            text-shadow: 0 0 10px #4caf50;
+        }
+
+        #score-board {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+        }
+
+        .score-box {
+            background: #2a2a2a;
+            padding: 5px 12px;
+            border-radius: 4px;
+            border: 1px solid #444;
+        }
+
+        #score {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        #high-score {
+            color: #ffeb3b;
+            font-weight: bold;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 360px;
+            height: 360px;
+        }
+
+        canvas {
+            background-color: #000000;
+            border: 4px solid #4caf50;
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #game-over-text {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.8rem;
+            color: #ff5722;
+            text-shadow: 0 0 10px #ff5722;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #ff5722;
+            text-align: center;
+            z-index: 10;
+            width: 80%;
+            box-sizing: border-box;
+        }
+
+        /* 🎮 D-PAD ON-SCREEN CONTROLS */
+        .controls-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 220px;
+        }
+
+        .dpad-row {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .dpad-btn {
+            width: 65px;
+            height: 55px;
+            margin: 4px;
+            background-color: #333333;
+            border: 2px solid #4caf50;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            outline: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px #222;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .dpad-btn:active {
+            background-color: #4caf50;
+            color: #000000;
+            box-shadow: 0 0px #222;
+            transform: translateY(4px);
+        }
+
+        .spacer-btn {
+            width: 65px;
+            height: 55px;
+            margin: 4px;
+            visibility: hidden;
+        }
+
+        #restart-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #ff5722;
+            border: none;
+            color: white;
+            font-size: 1rem;
+            font-family: inherit;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SNAKE</h1>
+    <div id="score-board">
+        <div class="score-box">Score: <span id="score">0</span></div>
+        <div class="score-box">High Score: <span id="high-score">0</span></div>
+    </div>
+    
+    <div class="canvas-container">
+        <div id="game-over-text">
+            GAME OVER<br>
+            <span id="new-high-score-msg" style="font-size: 1.1rem; color: #ffeb3b; display: none;">New High Score!🏆<br></span>
+            <button id="restart-btn">Restart Game</button>
+        </div>
+        <!-- Canvas slightly resized to 360x360 to fit nicely inside web elements -->
+        <canvas id="gameCanvas" width="360" height="360"></canvas>
+    </div>
+
+    <!-- 🎮 The Virtual Controller Layout -->
+    <div class="controls-container">
+        <div class="dpad-row">
+            <button class="dpad-btn" id="btn-up">▲</button>
+        </div>
+        <div class="dpad-row">
+            <button class="dpad-btn" id="btn-left">◀</button>
+            <div class="spacer-btn"></div>
+            <button class="dpad-btn" id="btn-right">▶</button>
+        </div>
+        <div class="dpad-row">
+            <button class="dpad-btn" id="btn-down">▼</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score");
+        const highScoreElement = document.getElementById("high-score");
+        const gameOverText = document.getElementById("game-over-text");
+        const newHighScoreMsg = document.getElementById("new-high-score-msg");
+        const restartBtn = document.getElementById("restart-btn");
+
+        const gridSize = 20; 
+        const tileCount = canvas.width / gridSize;
+
+        let snake = [];
+        let food = { x: 0, y: 0 };
+        let dx = gridSize; 
+        let dy = 0;        
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem("snakeHighScore")) || 0; 
+        let gameInterval;
+        let changingDirection = false; 
+        let achievedNewRecordThisRun = false;
+
+        highScoreElement.textContent = highScore;
+
+        // Start the game loop
+        resetGame();
+
+        // ⌨️ Keyboard Listeners (Kept as fallback backup)
+        document.addEventListener("keydown", handleKeyboard);
+
+        // 🖱️/📱 On-Screen Button Action Listeners
+        document.getElementById("btn-up").addEventListener("click", () => triggerDirection("UP"));
+        document.getElementById("btn-down").addEventListener("click", () => triggerDirection("DOWN"));
+        document.getElementById("btn-left").addEventListener("click", () => triggerDirection("LEFT"));
+        document.getElementById("btn-right").addEventListener("click", () => triggerDirection("RIGHT"));
+        restartBtn.addEventListener("click", resetGame);
+
+        function resetGame() {
+            snake = [
+                { x: gridSize * 5, y: gridSize * 5 },
+                { x: gridSize * 4, y: gridSize * 5 },
+                { x: gridSize * 3, y: gridSize * 5 }
+            ];
+            dx = gridSize;
+            dy = 0;
+            score = 0;
+            scoreElement.textContent = score;
+            achievedNewRecordThisRun = false;
+            gameOverText.style.display = "none";
+            newHighScoreMsg.style.display = "none";
+            restartBtn.style.display = "none";
+            placeFood();
+            
+            clearInterval(gameInterval);
+            gameInterval = setInterval(update, 120); // Balanced speed (120ms tick rate)
+        }
+
+        function update() {
+            if (hasGameEnded()) {
+                handleGameOver();
+                return;
+            }
+
+            changingDirection = false;
+            clearCanvas();
+            drawFood();
+            moveSnake();
+            drawSnake();
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawSnake() {
+            snake.forEach((part, index) => {
+                ctx.fillStyle = index === 0 ? "#4caf50" : "#2e7d32";
+                ctx.strokeStyle = "#000000";
+                ctx.fillRect(part.x, part.y, gridSize, gridSize);
+                ctx.strokeRect(part.x, part.y, gridSize, gridSize);
+            });
+        }
+
+        function moveSnake() {
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            snake.unshift(head);
+
+            const hasEatenFood = snake[0].x === food.x && snake[0].y === food.y;
+            if (hasEatenFood) {
+                score += 10;
+                scoreElement.textContent = score;
+                
+                if (score > highScore) {
+                    highScore = score;
+                    highScoreElement.textContent = highScore;
+                    localStorage.setItem("snakeHighScore", highScore);
+                    achievedNewRecordThisRun = true;
+                }
+                
+                placeFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function placeFood() {
+            food.x = Math.floor(Math.random() * tileCount) * gridSize;
+            food.y = Math.floor(Math.random() * tileCount) * gridSize;
+
+            snake.forEach(part => {
+                const hasCollided = part.x === food.x && part.y === food.y;
+                if (hasCollided) placeFood();
+            });
+        }
+
+        function drawFood() {
+            ctx.fillStyle = "#ff5722";
+            ctx.fillRect(food.x, food.y, gridSize, gridSize);
+        }
+
+        // Logic Processor for Turning Direction
+        function triggerDirection(dir) {
+            if (changingDirection) return;
+
+            const goingUp = dy === -gridSize;
+            const goingDown = dy === gridSize;
+            const goingRight = dx === gridSize;
+            const goingLeft = dx === -gridSize;
+
+            if (dir === "LEFT" && !goingRight) {
+                dx = -gridSize; dy = 0; changingDirection = true;
+            }
+            if (dir === "UP" && !goingDown) {
+                dx = 0; dy = -gridSize; changingDirection = true;
+            }
